@@ -1,0 +1,254 @@
+Battery: All the cage sections operating for a given Building 
+Column: All the cages operating a specific number of landings servicing a section of the Building 
+Floor: One of the destinations serviced by a given cage 
+Cage: One route going up and down 
+CallButton: Buttons located on each floors designed to call for an cage to go up or down 
+FloorRequestButton: Buttons located inside an cage to request a destination floor that the cage will take the passenger to 
+Doors: The doors open and close to let passengers in or out of the cage 
+OpenDoorButton: Button located inside an cage to force the door to remain open 
+CloseDoorButton: Button located inside an cage to request the closing of the door whenever possible 
+
+SEQUENCE main
+    SET battery_status TO operational
+    SET total_floors TO 66
+    SET total_column to 4
+    SET total_cages TO 12
+    SET cages_per_column TO 3
+    SET cages_status TO idle
+    SET doors TO close
+    SET cage_floor TO 0
+END SEQUENCE
+
+SEQUENCE check USING battery
+    READ system
+    IF system IS NOT safe
+        SET battery_status TO off
+    ELSE IF system IS safe
+        SET battery_status TO operational
+        CALL main
+    END if
+END SEQUENCE
+
+SEQUENCE requested_floor USING floor
+    READ requested_floor ENTERED BY user ON floor_pad
+        CALL find_column WITH floor RETURNING column
+        CALL find_cage WITH direction AND floor RETURNING cage
+        CALL send_request WITH requested_floor RETURNING sorted_requests_list
+        CALL display_cage_number WITH cage
+        CALL operate_cage WITH cage AND direction AND sorted_requests_list
+END SEQUENCE
+
+SEQUENCE floor_pad USING floor
+    SET floor_pad floor TO 0
+END SEQUENCE
+
+SEQUENCE display_cage_number_to_user USING cage
+    DISPLAY selected_cage_number TO floor_screen 
+END SEQUENCE
+
+SEQUENCE call_cage USING direction AND floor AND column
+    CALL activate_call_button WITH direction AND floor RETURNING call_button
+    CALL find_column WITH direction AND floor RETURNING column
+    CALL find_cage WITH direction AND floor RETURNING cage
+    CALL send_request WITH cage AND requested_floor RETURNING sorted_requests_list
+    CALL operate_cage WITH cage AND direction AND sorted_requests_list
+END SEQUENCE 
+
+SEQUENCE activate_call_button USING direction AND floor
+    CALL find_call_button WITH direction AND floor RETURNING call_button
+    SET call_button TO active
+END SEQUENCE
+
+SEQUENCE deactivate_call_button USING direction and floor
+    CALL find_call_button WITH direction AND floor RETURNING call_button
+    SET call_button TO unactive
+END SEQUENCE
+
+SEQUENCE find_call_button USING direction AND floor
+    FOR EACH call_button IN call_buttons
+        IF call_button_floor IS floor AND call_button direction IS cage_direction THEN 
+        RETURN call_button
+        END IF
+    END FOR 
+END SEQUENCE
+
+SET column_1_floors = 0 to 15
+SET column_2_floors = 0 AND 15 to 32
+SET column_3_floors = 0 AND 33 to 46
+SET column_4_floors = 0 AND 46 to 66
+
+SEQUENCE find_column USING direction AND floor AND column_floors
+    FOR EACH column IN battery
+        IF requested_floor IS IN column_1_floors
+            RETURN column_1
+        ELSE IF requested_floor IS IN column_2_floors
+            RETURN column_2
+        ELSE IF requested_floor IS IN column_3_floors
+            RETURN column_3
+        ELSE IF requested_floor IS IN column_4_floors
+            RETURN column_4
+        END IF
+    END FOR
+END SEQUENCE
+
+SEQUENCE find_cage USING direction AND floor AND column
+    FOR EACH cage IN chosen_column_cages
+        IF call_button_floor IS cage_floor AND cage_status IS stopped AND call_button_direction IS cage_direction THEN  
+            RETURN cage 
+        ELSE IF call_button_floor IS cage_floor AND cage_status IS idle THEN 
+            RETURN cage
+        ELSE IF call_button_floor IS < cage_floor AND cage_status IS moving OR stopped AND cage_direction IS call_button_direction THEN
+            CALL find_nearest_cage WITH call_button_floor AND cage_floor RETURNING cage
+            RETURN cage
+        ELSE IF cage_status IS idle THEN
+            CALL find_nearest_cage WITH call_button_floor AND cage_floor RETURNING cage
+            RETURN cage
+        END IF
+    END FOR
+    CALL find_least_busy_cage RETURNING least_busy_cage
+    RETURN least_busy_cage
+END SEQUENCE
+
+SEQUENCE find_least_busy_cage USING cage
+SET list_length TO total_floor
+    FOR EACH cage IN cages
+        IF list_length IS > length OF requests_list
+            SET list_length TO length OF requests_list
+		END IF
+    END FOR
+    DETERMINE least_busy_cage WITH list_length
+    RETURN least_busy_cage
+END SEQUENCE
+
+SEQUENCE find_nearest_cage USING call_button_floor AND cage_floor AND cage_direction
+    COMPUTE gap_ref as difference BETWEEN call_button_floor AND cage_floor
+    SET shortest_gap TO gap_ref
+        FOR EACH cage IN cages
+            IF cage_direction IS call_button_direction
+                COMPUTE gap as difference BETWEEN call_button_floor AND current_cage_floor
+                    IF gap IS < shortest_gap THEN
+                        SET shortest_gap TO gap
+                    END IF
+            END IF
+        END FOR
+    DETERMINE nearest_cage WITH shortest_gap
+    RETURN nearest_cage
+END SEQUENCE
+
+SEQUENCE send_request USING cage AND requested_floor                
+    ADD requested_floor TO requests_list
+    CALL sort_requests_list WITH requests_list RETURNING sorted_requests_list
+END SEQUENCE
+
+SEQUENCE sort_requests_list USING requests_list AND cage_direction
+        IF cage_direction IS up THEN
+            COMPUTE requests_list BY ASCENDING
+        ELSE IF cage_direction IS down THEN
+            COMPUTE requests_list BY DESCENDING
+        END if
+    SET requests_list TO sorted_requests_list
+    RETURN sorted_requests_list 
+END SEQUENCE
+
+SEQUENCE operate_cages USING cage AND direction AND sorted_requests_list
+    WHILE battery status IS operational                            
+        WHILE sorted_requests_list IS NOT EMPTY
+            READ requested_floor FROM sorted_requests_list                                                            
+                IF cage_floor IS requested_floor THEN 
+                    CALL open_door WITH cage                 
+                ELSE IF cage_floor IS > requested_floor THEN
+                    CALL move_down WITH cage AND requested_floor     
+                ELSE IF cage_floor IS < requested_floor THEN
+                    CALL move_up WITH cage AND requested_floor 
+                END IF 
+        END WHILE                                                    
+        SET cage_floor TO 0
+        CALL idle WITH cage
+    END WHILE                          
+END SEQUENCE
+
+SEQUENCE open_door_button USING open_door
+    CALL open_door WITH cage
+END SEQUENCE
+
+SEQUENCE open_door USING cage 
+    IF cage_status IS stopped THEN
+        Open door
+    END IF
+    INIT Timer TO 5 Seconds
+    CALL deactivate_floor_button
+    CALL deactivate_call_button
+END SEQUENCE
+
+SEQUENCE close_door_button USING close_door
+    CALL close_door WITH cage
+END SEQUENCE
+
+SEQUENCE close_door USING cage
+    CALL obstructed WITH cage
+    CALL weight WITH cage
+        close door
+    CALL move WITH cage
+END SEQUENCE 
+
+SEQUENCE move_down USING cage AND requested_floor
+    IF door IS NOT closed
+        CALL close_door WITH cage
+    END IF
+    CALL move WITH cage
+    REPEAT 
+        COMPUTE cage_floor AS cage_floor - 1 
+    UNTIL cage_floor IS requested_floor
+    CALL stop WITH cage
+    CALL open_door USING cage
+END SEQUENCE 
+
+SEQUENCE move_up USING cage AND requested_floor
+    IF door IS NOT closed
+        CALL close_door WITH cage
+    END IF
+    CALL move WITH cage
+    REPEAT 
+        COMPUTE cage_floor AS cage_floor + 1 
+    UNTIL cage_floor IS requested_floor
+    CALL stop WITH cage
+    CALL open_door WITH cage
+END SEQUENCE 
+
+SEQUENCE stop USING cage
+    SET cage_status TO stopped
+END SEQUENCE
+
+SEQUENCE move USING cage
+    SET cage_status TO moving
+END SEQUENCE
+
+SEQUENCE idle USING cage
+    SET cage_status TO idle
+END SEQUENCE
+
+SEQUENCE weight USING cage
+READ weight FROM balance
+    IF weight IS > max_weight 
+        CALL open_door UNTIL extra weight taken off
+    ELSE IF weight IS < max_weight AND IS > max_operational_weight
+        SET no more requests UNTIL weight taken off
+    ELSE proceed
+END SEQUENCE 
+
+SEQUENCE obstructed USING cage
+READ sensor FROM door 
+    IF door IS obstructed 
+        CALL open_door WITH cage
+    ELSE proceed 
+    END IF 
+END SEQUENCE 
+
+SEQUENCE display
+WHILE battery_status IS operational 
+    FOR EACH cage IN cages
+        PRINT cage_floor ON outside_display 
+        PRINT cage_floor ON inside_display 
+    END FOR
+END WHILE
+END SEQUENCE
