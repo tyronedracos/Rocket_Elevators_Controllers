@@ -44,9 +44,6 @@ namespace Commercial_Controller
         }
     }
 
-    // CLASS CONTROLLER ---------------------------------------------------------
-    // Controller is the class that manages Columns, Elevators and the requests
-
     public class Controller
     {
         public int NumberOfFloors;
@@ -87,8 +84,6 @@ namespace Commercial_Controller
             return elevator;
         }
     }
-
-    // CLASS BATTERY -----------------------------------------------------------
 
 
     public class Battery
@@ -137,8 +132,6 @@ namespace Commercial_Controller
         }
     }
 
-
-    // CLASS COLUMN -------------------------------------------------------
 
     public class Column
     {
@@ -208,7 +201,6 @@ namespace Commercial_Controller
 
     }
 
-    // CLASS ELEVATOR -------------------------------------------------------
 
     public class Elevator
     {
